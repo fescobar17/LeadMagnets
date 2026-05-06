@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Diagnóstico FinOps · Kruger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --orange: #ff5b00;
+      --orange-light: #ff7a2e;
+      --orange-dim: rgba(255,91,0,0.08);
+      --orange-mid: rgba(255,91,0,0.15);
+      --orange-border: rgba(255,91,0,0.25);
+      --bg: #faf9f7;
+      --card: #ffffff;
+      --text: #111827;
+      --text-2: #374151;
+      --muted: #9ca3af;
+      --border: #e8e3dc;
+      --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.06);
+      --shadow-hover: 0 4px 20px rgba(255,91,0,0.15), 0 8px 32px rgba(0,0,0,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Noise overlay */
+    #noise-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.4;
+    }
+
+    /* Background blobs */
+    .blob {
+      position: fixed;
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .blob-1 {
+      width: 600px;
+      height: 600px;
+      top: -120px;
+      right: -120px;
+      background: radial-gradient(circle, rgba(255,91,0,0.06) 0%, transparent 70%);
+    }
+    .blob-2 {
+      width: 400px;
+      height: 400px;
+      bottom: -80px;
+      left: -80px;
+      background: radial-gradient(circle, rgba(255,91,0,0.04) 0%, transparent 70%);
+    }
+
+    /* Layout */
+    #app {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      width: 100%;
+      max-width: 520px;
+      overflow: hidden;
+    }
+    .card-body {
+      padding: 32px;
+    }
+    @media (min-width: 640px) {
+      .card-body { padding: 40px; }
+    }
+
+    /* Screen transitions */
+    .screen {
+      display: none;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 350ms cubic-bezier(0.4,0,0.2,1), transform 350ms cubic-bezier(0.4,0,0.2,1);
+      width: 100%;
+      max-width: 520px;
+    }
+    .screen.active {
+      display: block;
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .screen.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Orange pill tag */
+    .pill-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--orange-dim);
+      border: 1px solid var(--orange-border);
+      border-radius: 50px;
+      color: var(--orange);
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.04em;
+      padding: 6px 14px;
+      margin-bottom: 16px;
+    }
+    .pill-tag::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--orange);
+      flex-shrink: 0;
+    }
+
+    /* Primary button */
+    .btn-primary {
+      position: relative;
+      display: block;
+      width: 100%;
+      background: var(--orange);
+      color: #fff;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      border: none;
+      border-radius: 14px;
+      padding: 16px 24px;
+      cursor: pointer;
+      transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
+      overflow: hidden;
+      text-align: center;
+    }
+    .btn-primary::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+      border-radius: 14px;
+      pointer-events: none;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-hover);
+    }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .btn-primary:focus-visible {
+      outline: 2px solid var(--orange);
+      outline-offset: 2px;
+    }
+
+    /* Back link */
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      font-size: 0.875rem;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      margin-bottom: 20px;
+      transition: color 150ms;
+    }
+    .back-link:hover { color: var(--text-2); }
+    .back-link:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
+
+    /* ===== SCREEN 1 ===== */
+
+    /* Hero area */
+    .hero-area {
+      position: relative;
+      height: 180px;
+      background: var(--orange-dim);
+      border-radius: 16px 16px 0 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: -32px -32px 24px -32px;
+    }
+    @media (min-width: 640px) {
+      .hero-area { margin: -40px -40px 28px -40px; }
+    }
+
+    .hero-cloud-svg {
+      width: 200px;
+      height: auto;
+      opacity: 0.6;
+    }
+
+    /* Brand pill */
+    .brand-pill {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 50px;
+      padding: 6px 12px 6px 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .brand-dot {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--orange);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .brand-dot img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain;
+      filter: brightness(0) invert(1);
+    }
+    .brand-name {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--text);
+    }
+
+    /* Hero title */
+    .hero-title {
+      font-family: 'Sora', sans-serif;
+      font-weight: 800;
+      font-size: clamp(1.7rem, 5vw, 2.4rem);
+      line-height: 1.15;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+    .hero-title .accent { color: var(--orange); }
+
+    /* Hero description */
+    .hero-desc {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      color: #6b7280;
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    /* Stats strip */
+    .stats-strip {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .stat-cell {
+      flex: 1;
+      text-align: center;
+      padding: 12px 4px;
+      border-right: 1px solid var(--border);
+    }
+    .stat-cell:last-child { border-right: none; }
+    .stat-num {
+      display: block;
+      font-family: 'Sora', sans-serif;
+      font-weight: 800;
+      font-size: 1.4rem;
+      color: var(--orange);
+      line-height: 1.1;
+    }
+    .stat-label {
+      display: block;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.62rem;
+      letter-spacing: 0.05em;
+      margin-top: 3px;
+    }
+
+    /* ===== SCREEN 2 ===== */
+
+    /* Progress bar */
+    .progress-track {
+      height: 4px;
+      background: #f3f4f6;
+      border-radius: 2px;
+      margin-bottom: 28px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--orange);
+      border-radius: 2px;
+      transition: width 400ms ease;
+    }
+
+    /* Form labels */
+    .form-label {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      font-size: 0.9rem;
+      color: var(--text-2);
+      margin-bottom: 8px;
+    }
+
+    /* Field groups */
+    .field-group {
+      margin-bottom: 22px;
+    }
+
+    /* Currency input */
+    .currency-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .currency-prefix {
+      position: absolute;
+      left: 16px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      color: var(--muted);
+      pointer-events: none;
+      z-index: 1;
+    }
+    .currency-input {
+      width: 100%;
+      padding: 14px 16px 14px 30px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 150ms;
+      appearance: none;
+      -moz-appearance: textfield;
+    }
+    .currency-input::-webkit-outer-spin-button,
+    .currency-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .currency-input:focus { outline: none; border-color: var(--orange); }
+    .currency-input:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+    .currency-input.invalid { border-color: #dc2626; }
+
+    /* Text / email inputs */
+    .text-input {
+      width: 100%;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 150ms;
+    }
+    .text-input:focus { outline: none; border-color: var(--orange); }
+    .text-input:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+    .text-input.invalid { border-color: #dc2626; }
+
+    .field-error {
+      display: block;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.8rem;
+      color: #dc2626;
+      margin-top: 5px;
+    }
+
+    /* Selector pills group */
+    .pill-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .pill-group.grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    /* Selector pill button */
+    .sel-pill {
+      flex: 1;
+      min-width: 0;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 500;
+      font-size: 0.85rem;
+      color: var(--text-2);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 150ms, background 150ms, color 150ms;
+      word-break: break-word;
+    }
+    .sel-pill:hover { border-color: var(--orange); }
+    .sel-pill.selected {
+      background: var(--orange-dim);
+      border-color: var(--orange);
+      color: var(--orange);
+      font-weight: 700;
+    }
+    .sel-pill:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+    /* Section heading in form */
+    .form-heading {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 1.3rem;
+      color: var(--text);
+      margin-bottom: 22px;
+      line-height: 1.25;
+    }
+
+    /* ===== SCREEN 3 ===== */
+
+    .screen3-desc {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      color: #6b7280;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      margin-bottom: 22px;
+    }
+
+    .smallprint {
+      text-align: center;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 10px;
+    }
+
+    /* ===== SCREEN 4 ===== */
+
+    .greeting {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      font-size: 1.1rem;
+      color: var(--text-2);
+      margin-bottom: 20px;
+    }
+
+    /* Primary result card */
+    .result-main {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .result-label {
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 10px;
+    }
+    .result-monthly {
+      font-family: 'Sora', sans-serif;
+      font-weight: 800;
+      font-size: 2rem;
+      color: var(--orange);
+      line-height: 1.1;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .result-annual {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: var(--text-2);
+      display: block;
+    }
+
+    /* Risk pill */
+    .risk-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border-radius: 50px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 8px 16px;
+      margin-bottom: 16px;
+      color: #fff;
+    }
+    .risk-pill::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.7);
+    }
+    .risk-critical { background: #dc2626; }
+    .risk-alto { background: var(--orange); }
+    .risk-medio { background: #f59e0b; }
+    .risk-bajo { background: #16a34a; }
+
+    /* Urgency card */
+    .urgency-card {
+      background: var(--orange-dim);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      color: var(--text-2);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    /* Dimension breakdown */
+    .dimensions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    @media (min-width: 640px) {
+      .dimensions-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .dim-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .dim-title {
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .dim-subtitle {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      font-size: 0.78rem;
+      color: #6b7280;
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .bar-track {
+      height: 6px;
+      background: #f3f4f6;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--orange), var(--orange-light));
+      border-radius: 3px;
+      width: 0%;
+      transition: width 800ms cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* CTA section */
+    .cta-section {
+      background: var(--orange);
+      border-radius: 20px;
+      padding: 28px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .cta-heading {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 1.4rem;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .cta-sub {
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 300;
+      font-size: 0.95rem;
+      color: rgba(255,255,255,0.9);
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .btn-cta-white {
+      display: inline-block;
+      background: #fff;
+      color: var(--orange);
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 14px 28px;
+      border-radius: 14px;
+      text-decoration: none;
+      transition: transform 150ms ease, box-shadow 150ms ease;
+    }
+    .btn-cta-white:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    .btn-cta-white:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+    /* Restart link */
+    .restart-link {
+      display: block;
+      text-align: center;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 400;
+      font-size: 0.9rem;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 8px;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      transition: color 150ms;
+    }
+    .restart-link:hover { color: var(--text-2); }
+    .restart-link:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; border-radius: 4px; }
+
+    /* Footer logo mark */
+    .footer-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+      opacity: 0.5;
+    }
+    .footer-mark img {
+      height: 20px;
+      width: auto;
+    }
+    .footer-mark span {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    /* Utility */
+    .mt-16 { margin-top: 16px; }
+    .mb-0 { margin-bottom: 0; }
+    .text-center { text-align: center; }
+  </style>
+</head>
+<body>
+
+  <!-- Noise overlay -->
+  <svg id="noise-overlay" xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">
+    <filter id="noise">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+    <rect width="100%" height="100%" filter="url(#noise)" opacity="1"/>
+  </svg>
+
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+
+  <div id="app">
+
+    <!-- ===== SCREEN 1 ===== -->
+    <section id="screen-1" class="screen active" role="main" aria-label="Introducción">
+      <div class="card">
+        <div class="card-body">
+
+          <div class="hero-area">
+            <!-- Cloud SVG illustration -->
+            <svg class="hero-cloud-svg" viewBox="0 0 220 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M170 80H60C42.3 80 28 65.7 28 48s14.3-32 32-32c1.1 0 2.2.1 3.3.2C68.3 26 68.3 26 68.3 26 74.1 15.2 85.7 8 99 8c19.9 0 36 16.1 36 36 0 .3 0 .6-.01.9C141.3 42.3 148 38 156 38c13.8 0 25 11.2 25 25 0 9.4-5.2 17.6-12.9 21.8" stroke="#ff5b00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M90 80V100M90 100L80 110M90 100L100 110" stroke="#ff5b00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M130 80V95M130 95L122 103M130 95L138 103" stroke="#ff5b00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="90" cy="57" r="4" fill="#ff5b00" opacity="0.4"/>
+              <circle cx="115" cy="50" r="3" fill="#ff5b00" opacity="0.4"/>
+              <circle cx="140" cy="60" r="3.5" fill="#ff5b00" opacity="0.4"/>
+            </svg>
+
+            <!-- Brand pill -->
+            <div class="brand-pill">
+              <div class="brand-dot">
+                <img src="https://res.cloudinary.com/diq6t3bjv/image/upload/v1777907597/Logo-KrugeR_qngzle_qslvzk.png" alt="Kruger logo">
+              </div>
+              <span class="brand-name">Kruger</span>
+            </div>
+          </div>
+
+          <span class="pill-tag">Diagnóstico Gratuito · FinOps</span>
+
+          <h1 class="hero-title">
+            ¿Cuánto está <span class="accent">perdiendo</span> en la nube?
+          </h1>
+
+          <p class="hero-desc">
+            Calcula en menos de 60 segundos cuánto de tu factura mensual de nube es gasto recuperable — sin compartir credenciales ni instalar nada.
+          </p>
+
+          <div class="stats-strip" role="list">
+            <div class="stat-cell" role="listitem">
+              <span class="stat-num">30</span>
+              <span class="stat-label">años</span>
+            </div>
+            <div class="stat-cell" role="listitem">
+              <span class="stat-num">20+</span>
+              <span class="stat-label">países</span>
+            </div>
+            <div class="stat-cell" role="listitem">
+              <span class="stat-num">+400</span>
+              <span class="stat-label">clientes</span>
+            </div>
+            <div class="stat-cell" role="listitem">
+              <span class="stat-num">+2300</span>
+              <span class="stat-label">proyectos</span>
+            </div>
+          </div>
+
+          <button class="btn-primary" id="btn-start" type="button">
+            Calcular mi ahorro →
+          </button>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SCREEN 2 ===== -->
+    <section id="screen-2" class="screen" role="main" aria-label="Ingresa tu información">
+      <div class="card">
+        <div class="card-body">
+
+          <button class="back-link" id="btn-back-2" type="button" aria-label="Volver a inicio">← Volver</button>
+
+          <div class="progress-track" role="progressbar" aria-valuenow="33" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso del formulario">
+            <div class="progress-fill" id="progress-bar" style="width: 33%"></div>
+          </div>
+
+          <span class="pill-tag">Paso 1 de 3 · Tu situación actual</span>
+          <h2 class="form-heading">Cuéntanos sobre tu nube</h2>
+
+          <!-- Monthly bill -->
+          <div class="field-group">
+            <label class="form-label" for="input-bill">Factura mensual de nube (USD)</label>
+            <div class="currency-wrapper">
+              <span class="currency-prefix">$</span>
+              <input
+                type="text"
+                id="input-bill"
+                class="currency-input"
+                placeholder="Ej. 15,000"
+                inputmode="numeric"
+                autocomplete="off"
+              >
+            </div>
+          </div>
+
+          <!-- Providers -->
+          <div class="field-group">
+            <label class="form-label">Proveedores de nube activos</label>
+            <div class="pill-group" role="group" aria-label="Número de proveedores">
+              <button class="sel-pill" data-group="providers" data-value="1" type="button" aria-pressed="false">1 proveedor</button>
+              <button class="sel-pill" data-group="providers" data-value="2" type="button" aria-pressed="false">2 proveedores</button>
+              <button class="sel-pill" data-group="providers" data-value="3" type="button" aria-pressed="false">3 o más</button>
+            </div>
+          </div>
+
+          <!-- Audit recency -->
+          <div class="field-group mb-0">
+            <label class="form-label">Último diagnóstico FinOps</label>
+            <div class="pill-group grid-2" role="group" aria-label="Antigüedad del último diagnóstico">
+              <button class="sel-pill" data-group="auditRecency" data-value="never" type="button" aria-pressed="false">Nunca</button>
+              <button class="sel-pill" data-group="auditRecency" data-value="1-2y" type="button" aria-pressed="false">Hace 1–2 años</button>
+              <button class="sel-pill" data-group="auditRecency" data-value="6-12m" type="button" aria-pressed="false">Hace 6–12 meses</button>
+              <button class="sel-pill" data-group="auditRecency" data-value="<6m" type="button" aria-pressed="false">Hace menos de 6 meses</button>
+            </div>
+          </div>
+
+          <button class="btn-primary mt-16" id="btn-next-2" type="button" disabled>
+            Ver mi diagnóstico →
+          </button>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SCREEN 3 ===== -->
+    <section id="screen-3" class="screen" role="main" aria-label="Datos de contacto">
+      <div class="card">
+        <div class="card-body">
+
+          <button class="back-link" id="btn-back-3" type="button" aria-label="Volver al paso anterior">← Volver</button>
+
+          <div class="progress-track" role="progressbar" aria-valuenow="66" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso del formulario">
+            <div class="progress-fill" style="width: 66%"></div>
+          </div>
+
+          <span class="pill-tag">Paso 2 de 3 · Datos de contacto</span>
+          <h2 class="form-heading">Un paso más para ver tu diagnóstico</h2>
+
+          <p class="screen3-desc">
+            Personalizamos el resultado con el nombre de tu empresa y te enviamos una copia por correo.
+          </p>
+
+          <form id="lead-form" novalidate>
+            <div class="field-group">
+              <label class="form-label" for="input-name">Nombre completo</label>
+              <input type="text" id="input-name" class="text-input" autocomplete="name" required>
+              <small class="field-error" id="err-name"></small>
+            </div>
+            <div class="field-group">
+              <label class="form-label" for="input-email">Correo corporativo</label>
+              <input type="email" id="input-email" class="text-input" autocomplete="email" required>
+              <small class="field-error" id="err-email"></small>
+            </div>
+            <div class="field-group">
+              <label class="form-label" for="input-company">Empresa</label>
+              <input type="text" id="input-company" class="text-input" autocomplete="organization" required>
+              <small class="field-error" id="err-company"></small>
+            </div>
+            <div class="field-group mb-0">
+              <label class="form-label" for="input-role">Cargo</label>
+              <input type="text" id="input-role" class="text-input" autocomplete="organization-title" required>
+              <small class="field-error" id="err-role"></small>
+            </div>
+
+            <button class="btn-primary mt-16" id="btn-submit" type="submit">
+              Ver resultados →
+            </button>
+
+            <p class="smallprint">Sin spam. Solo tu diagnóstico.</p>
+          </form>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== SCREEN 4 ===== -->
+    <section id="screen-4" class="screen" role="main" aria-label="Resultados de tu diagnóstico">
+      <div class="card">
+        <div class="card-body">
+
+          <p class="greeting" id="result-greeting"></p>
+
+          <!-- Primary result -->
+          <div class="result-main">
+            <span class="result-label">Gasto recuperable estimado</span>
+            <span class="result-monthly" id="result-monthly" aria-live="polite">$0 – $0 / mes</span>
+            <span class="result-annual" id="result-annual">$0 – $0 / año</span>
+          </div>
+
+          <!-- Risk score -->
+          <div class="text-center" style="margin-bottom:16px;">
+            <span class="risk-pill" id="risk-pill"></span>
+          </div>
+
+          <!-- Urgency card -->
+          <div class="urgency-card" id="urgency-card"></div>
+
+          <!-- Dimension breakdown -->
+          <div class="dimensions-grid" id="dimensions-grid">
+            <div class="dim-card">
+              <p class="dim-title">Antigüedad del diagnóstico</p>
+              <p class="dim-subtitle" id="dim-sub-audit"></p>
+              <div class="bar-track"><div class="bar-fill" id="bar-audit"></div></div>
+            </div>
+            <div class="dim-card">
+              <p class="dim-title">Complejidad multi-nube</p>
+              <p class="dim-subtitle" id="dim-sub-providers"></p>
+              <div class="bar-track"><div class="bar-fill" id="bar-providers"></div></div>
+            </div>
+            <div class="dim-card">
+              <p class="dim-title">Volumen de gasto</p>
+              <p class="dim-subtitle" id="dim-sub-volume"></p>
+              <div class="bar-track"><div class="bar-fill" id="bar-volume"></div></div>
+            </div>
+          </div>
+
+          <!-- CTA section -->
+          <div class="cta-section">
+            <h3 class="cta-heading">¿Quiere recuperar este margen?</h3>
+            <p class="cta-sub">Una sesión de 15 minutos con nuestro equipo FinOps te muestra exactamente dónde está el ahorro.</p>
+            <a href="https://calendar.app.google/HuGQyzd4GnfRteKo7" target="_blank" rel="noopener noreferrer" class="btn-cta-white">Conversemos →</a>
+          </div>
+
+          <button class="restart-link" id="btn-restart" type="button">Reiniciar diagnóstico</button>
+
+          <!-- Footer mark -->
+          <div class="footer-mark">
+            <img src="https://res.cloudinary.com/diq6t3bjv/image/upload/v1777907597/Logo-KrugeR_qngzle_qslvzk.png" alt="Kruger">
+            <span>Kruger Corporation · FinOps</span>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    const APPS_SCRIPT_URL = "https://script.google.com/a/macros/krugercorporation.com/s/AKfycbwms6OJHwnb6W6JlNhiYLGsW_8Z-_h7bthwanlcg5MzF1PIvJsiei7hkY0Nh5xc4OCt5g/exec"; // placeholder — operator replaces before deploy
+
+    // ── State ──────────────────────────────────────────────────────────────────
+    let currentScreen = 1;
+    const data = {
+      monthlyBill: 0,
+      providers: null,
+      auditRecency: null,
+      name: '',
+      email: '',
+      company: '',
+      role: ''
+    };
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    function fmt(n) {
+      return n.toLocaleString('en-US');
+    }
+
+    function round100(n) {
+      return Math.round(n / 100) * 100;
+    }
+
+    function fmtDollar(n) {
+      return '$' + fmt(n);
+    }
+
+    function getFirstName(fullName) {
+      return (fullName || '').trim().split(/\s+/)[0] || fullName;
+    }
+
+    function showScreen(n) {
+      const prev = document.getElementById('screen-' + currentScreen);
+      const next = document.getElementById('screen-' + n);
+      if (prev) prev.classList.remove('active', 'visible');
+      if (next) {
+        next.classList.add('active');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            next.classList.add('visible');
+          });
+        });
+      }
+      currentScreen = n;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Screen 2 validation ────────────────────────────────────────────────────
+    function checkStep2() {
+      const ok = data.monthlyBill > 0 && data.providers !== null && data.auditRecency !== null;
+      document.getElementById('btn-next-2').disabled = !ok;
+    }
+
+    // Bill input formatting
+    const billInput = document.getElementById('input-bill');
+    billInput.addEventListener('input', function () {
+      const raw = this.value.replace(/[^0-9]/g, '');
+      const num = parseInt(raw, 10) || 0;
+      data.monthlyBill = num;
+      if (raw) {
+        const formatted = num.toLocaleString('en-US');
+        this.value = formatted;
+      }
+      checkStep2();
+    });
+
+    // Selector pills
+    document.querySelectorAll('.sel-pill').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        const group = this.dataset.group;
+        const value = this.dataset.value;
+        document.querySelectorAll('[data-group="' + group + '"]').forEach(function (p) {
+          p.classList.remove('selected');
+          p.setAttribute('aria-pressed', 'false');
+        });
+        this.classList.add('selected');
+        this.setAttribute('aria-pressed', 'true');
+        if (group === 'providers') data.providers = parseInt(value, 10);
+        if (group === 'auditRecency') data.auditRecency = value;
+        checkStep2();
+      });
+    });
+
+    // ── Navigation ─────────────────────────────────────────────────────────────
+    document.getElementById('btn-start').addEventListener('click', function () {
+      showScreen(2);
+    });
+    document.getElementById('btn-back-2').addEventListener('click', function () {
+      showScreen(1);
+    });
+    document.getElementById('btn-next-2').addEventListener('click', function () {
+      document.getElementById('progress-bar').style.width = '66%';
+      showScreen(3);
+    });
+    document.getElementById('btn-back-3').addEventListener('click', function () {
+      showScreen(2);
+    });
+
+    // ── Screen 3 form ──────────────────────────────────────────────────────────
+    const FREE_DOMAINS = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.com'];
+
+    function validateEmail(email) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Ingresa un correo válido.';
+      const domain = email.split('@')[1].toLowerCase();
+      if (FREE_DOMAINS.indexOf(domain) !== -1) return 'Por favor usa tu correo corporativo.';
+      return '';
+    }
+
+    function validateField(id, errId, validatorFn) {
+      const input = document.getElementById(id);
+      const errEl = document.getElementById(errId);
+      const msg = validatorFn(input.value.trim());
+      if (msg) {
+        input.classList.add('invalid');
+        errEl.textContent = msg;
+      } else {
+        input.classList.remove('invalid');
+        errEl.textContent = '';
+      }
+      return !msg;
+    }
+
+    ['input-name', 'input-company', 'input-role'].forEach(function (id) {
+      document.getElementById(id).addEventListener('blur', function () {
+        const errId = 'err-' + id.replace('input-', '');
+        const input = document.getElementById(id);
+        const errEl = document.getElementById(errId);
+        if (!input.value.trim()) {
+          input.classList.add('invalid');
+          errEl.textContent = 'Este campo es obligatorio.';
+        } else {
+          input.classList.remove('invalid');
+          errEl.textContent = '';
+        }
+      });
+    });
+
+    document.getElementById('input-email').addEventListener('blur', function () {
+      validateField('input-email', 'err-email', validateEmail);
+    });
+
+    document.getElementById('lead-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+
+      const nameVal = document.getElementById('input-name').value.trim();
+      const emailVal = document.getElementById('input-email').value.trim();
+      const companyVal = document.getElementById('input-company').value.trim();
+      const roleVal = document.getElementById('input-role').value.trim();
+
+      let valid = true;
+
+      function checkRequired(id, errId) {
+        const input = document.getElementById(id);
+        const errEl = document.getElementById(errId);
+        if (!input.value.trim()) {
+          input.classList.add('invalid');
+          errEl.textContent = 'Este campo es obligatorio.';
+          valid = false;
+        } else {
+          input.classList.remove('invalid');
+          errEl.textContent = '';
+        }
+      }
+
+      checkRequired('input-name', 'err-name');
+      checkRequired('input-company', 'err-company');
+      checkRequired('input-role', 'err-role');
+      if (!validateField('input-email', 'err-email', validateEmail)) valid = false;
+
+      if (!valid) return;
+
+      data.name = nameVal;
+      data.email = emailVal;
+      data.company = companyVal;
+      data.role = roleVal;
+
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({}, data, { timestamp: new Date().toISOString() }))
+      }).catch(function () {});
+
+      buildResults();
+      showScreen(4);
+    });
+
+    // ── Calculation ────────────────────────────────────────────────────────────
+    function calcResults() {
+      const bill = data.monthlyBill;
+      const providers = data.providers;
+      const audit = data.auditRecency;
+
+      const baseRanges = {
+        'never':  { low: 0.25, high: 0.35 },
+        '1-2y':   { low: 0.18, high: 0.26 },
+        '6-12m':  { low: 0.10, high: 0.16 },
+        '<6m':    { low: 0.04, high: 0.09 }
+      };
+
+      const multipliers = { 1: 1.00, 2: 1.15, 3: 1.30 };
+
+      const range = baseRanges[audit];
+      const mult = multipliers[providers] || 1;
+
+      const lowMonthly  = round100(range.low  * mult * bill * 0.5);
+      const highMonthly = round100(range.high * mult * bill);
+      const lowAnnual   = round100(lowMonthly  * 12);
+      const highAnnual  = round100(highMonthly * 12);
+
+      // Risk score
+      let risk;
+      if (audit === 'never' && (providers >= 3 || bill > 20000)) {
+        risk = 'critical';
+      } else if (audit === 'never') {
+        risk = 'alto';
+      } else if (audit === '1-2y' && providers >= 2) {
+        risk = 'alto';
+      } else if (audit === '1-2y' && providers === 1) {
+        risk = 'medio';
+      } else if (audit === '6-12m' && providers >= 2) {
+        risk = 'medio';
+      } else if (audit === '6-12m' && providers === 1) {
+        risk = 'medio';
+      } else if (audit === '<6m' && providers >= 2) {
+        risk = 'medio';
+      } else {
+        risk = 'bajo';
+      }
+
+      // Bar percentages
+      const barAudit = { 'never': 95, '1-2y': 70, '6-12m': 40, '<6m': 15 }[audit];
+      const barProviders = { 1: 25, 2: 60, 3: 90 }[providers];
+      let barVolume;
+      if (bill < 5000) barVolume = 25;
+      else if (bill < 15000) barVolume = 50;
+      else if (bill < 50000) barVolume = 75;
+      else barVolume = 95;
+
+      // Dimension subtitles
+      const subAudit = {
+        'never':  'Sin diagnóstico previo, el desperdicio se acumula sin control.',
+        '1-2y':   'Más de un año sin revisión: las cargas drift y los recursos zombi se multiplican.',
+        '6-12m':  'Plazo razonable, pero los servicios autoescalados ya generaron desviaciones.',
+        '<6m':    'Buen ritmo de revisión. La oportunidad está en optimización avanzada.'
+      }[audit];
+
+      const subProviders = {
+        1: 'Un solo proveedor reduce dispersión, pero limita la palanca de negociación.',
+        2: 'Dos proveedores duplican la complejidad de gobernanza y visibilidad.',
+        3: 'Más de dos nubes activas: la falta de visibilidad consolidada es la principal fuga.'
+      }[providers];
+
+      let subVolume;
+      if (bill < 5000) subVolume = 'Factura baja, pero la gobernanza temprana evita escalar el gasto sin control.';
+      else if (bill < 15000) subVolume = 'Volumen medio donde el ahorro porcentual se traduce en miles de USD anuales.';
+      else if (bill < 50000) subVolume = 'Volumen alto: cada punto porcentual recuperado equivale a decenas de miles al año.';
+      else subVolume = 'Volumen estratégico. Una optimización profunda libera capital significativo.';
+
+      return {
+        lowMonthly, highMonthly, lowAnnual, highAnnual,
+        risk, barAudit, barProviders, barVolume,
+        subAudit, subProviders, subVolume
+      };
+    }
+
+    // ── Animated counter ───────────────────────────────────────────────────────
+    function animateCounter(el, fromVal, toVal, duration, suffix, highMonthly) {
+      const start = performance.now();
+      function ease(t) { return 1 - Math.pow(1 - t, 3); }
+      function tick(now) {
+        const elapsed = now - start;
+        const t = Math.min(elapsed / duration, 1);
+        const current = Math.round(fromVal + (toVal - fromVal) * ease(t));
+        el.textContent = fmtDollar(current) + ' – ' + fmtDollar(highMonthly) + ' / mes';
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // ── Build results screen ───────────────────────────────────────────────────
+    function buildResults() {
+      const r = calcResults();
+      const firstName = getFirstName(data.name);
+      const companyName = data.company;
+
+      document.getElementById('result-greeting').textContent =
+        'Hola ' + firstName + ', aquí está tu diagnóstico 👋';
+
+      document.getElementById('result-annual').textContent =
+        fmtDollar(r.lowAnnual) + ' – ' + fmtDollar(r.highAnnual) + ' / año';
+
+      const monthlyEl = document.getElementById('result-monthly');
+      monthlyEl.textContent = fmtDollar(0) + ' – ' + fmtDollar(r.highMonthly) + ' / mes';
+
+      // Risk pill
+      const riskPill = document.getElementById('risk-pill');
+      const riskMap = {
+        critical: { cls: 'risk-critical', label: 'Riesgo Crítico' },
+        alto:     { cls: 'risk-alto',     label: 'Riesgo Alto' },
+        medio:    { cls: 'risk-medio',    label: 'Riesgo Medio' },
+        bajo:     { cls: 'risk-bajo',     label: 'Riesgo Bajo' }
+      };
+      const riskInfo = riskMap[r.risk];
+      riskPill.className = 'risk-pill ' + riskInfo.cls;
+      riskPill.textContent = riskInfo.label;
+
+      // Urgency card
+      const urgencyEl = document.getElementById('urgency-card');
+      if (data.monthlyBill < 1000) {
+        urgencyEl.textContent =
+          'Incluso con facturas pequeñas, la gobernanza de nube evita escalar el gasto sin control. ' +
+          companyName + ' puede establecer las bases ahora antes de que crezca la complejidad.';
+      } else if (r.risk === 'bajo') {
+        urgencyEl.textContent =
+          'Tienes buenas bases, ' + firstName + '. La optimización avanzada llevará a ' +
+          companyName + ' al siguiente nivel: ahorros marginales que compuestos representan ' +
+          fmtDollar(r.highAnnual) + ' USD al año.';
+      } else {
+        urgencyEl.textContent =
+          'A este ritmo, ' + companyName + ' podría recuperar hasta ' +
+          fmtDollar(r.highAnnual) + ' USD antes de fin de año sin cambiar de proveedor.';
+      }
+
+      // Dimension subtitles
+      document.getElementById('dim-sub-audit').textContent = r.subAudit;
+      document.getElementById('dim-sub-providers').textContent = r.subProviders;
+      document.getElementById('dim-sub-volume').textContent = r.subVolume;
+
+      // Trigger animations after transition
+      setTimeout(function () {
+        animateCounter(monthlyEl, 0, r.lowMonthly, 1400, '', r.highMonthly);
+
+        const bars = [
+          { id: 'bar-audit',     pct: r.barAudit },
+          { id: 'bar-providers', pct: r.barProviders },
+          { id: 'bar-volume',    pct: r.barVolume }
+        ];
+        bars.forEach(function (b, i) {
+          setTimeout(function () {
+            const el = document.getElementById(b.id);
+            if (el) el.style.width = b.pct + '%';
+          }, 200 + i * 200);
+        });
+      }, 400);
+    }
+
+    // ── Restart ────────────────────────────────────────────────────────────────
+    document.getElementById('btn-restart').addEventListener('click', function () {
+      data.monthlyBill = 0;
+      data.providers = null;
+      data.auditRecency = null;
+      data.name = '';
+      data.email = '';
+      data.company = '';
+      data.role = '';
+
+      billInput.value = '';
+      document.querySelectorAll('.sel-pill').forEach(function (p) {
+        p.classList.remove('selected');
+        p.setAttribute('aria-pressed', 'false');
+      });
+      document.getElementById('btn-next-2').disabled = true;
+
+      ['input-name','input-email','input-company','input-role'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) { el.value = ''; el.classList.remove('invalid'); }
+      });
+      ['err-name','err-email','err-company','err-role'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+      });
+
+      document.getElementById('progress-bar').style.width = '33%';
+
+      ['bar-audit','bar-providers','bar-volume'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.style.width = '0%';
+      });
+
+      showScreen(1);
+    });
+  </script>
+</body>
+</html>
