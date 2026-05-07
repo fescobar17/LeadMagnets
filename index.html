@@ -1120,6 +1120,8 @@
       data.company = companyVal;
       data.role = roleVal;
 
+      const r = calcResults();
+
       fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
